@@ -1,139 +1,189 @@
 import aiohttp
-import os
 import json
 import re
+import time
 import asyncio
-from app.config import HEADERS
+from app.config import TOKEN_SETS # Import new structure
 
-# --- Lấy thông tin từ ENV Render ---
-GIST_URL = os.environ.get("GIST_URL")
-EMAIL = os.environ.get("EMAIL_ACC")
-PASSWORD = os.environ.get("PASSWORD_ACC")
+HEADERS = {
+    'Host': 'api.revenuecat.com',
+    'Authorization': 'Bearer appl_JngFETzdodyLmCREOlwTUtXdQik',
+    'Content-Type': 'application/json',
+    'Accept': '*/*',
+    'X-Platform': 'iOS',
+    'X-Platform-Version': 'Version 26.2 (Build 23C55)',
+    'X-Platform-Device': 'iPhone15,3',
+    'X-Platform-Flavor': 'native',
+    'X-Version': '5.41.0',
+    'X-Client-Version': '2.32.2',
+    'X-Client-Bundle-ID': 'com.locket.Locket',
+    'X-Client-Build-Version': '3',
+    'X-StoreKit2-Enabled': 'true',
+    'X-StoreKit-Version': '2',
+    'X-Observer-Mode-Enabled': 'false',
+    'X-Is-Sandbox': 'true', # Will be overwritten by token set
+    'X-Storefront': 'VNM',
+    'X-Apple-Device-Identifier': '39A73C25-1E05-4350-ADA7-5CD3FE1079E8',
+    'X-Preferred-Locales': 'vi_KR,ko_KR,en_KR',
+    'X-Nonce': 'w0Mlb6+AmV4WYuVv',
+    'X-Is-Backgrounded': 'false',
+    'X-Retry-Count': '0',
+    'X-Is-Debug-Build': 'false',
+    'User-Agent': 'Locket/3 CFNetwork/3860.300.31 Darwin/25.2.0',
+    'Accept-Language': 'vi-VN,vi;q=0.9',
+    'Connection': 'keep-alive',
+    'Pragma': 'no-cache',
+    'Cache-Control': 'no-cache',
+    'X-RevenueCat-ETag': ''
+}
 
-async def get_credentials_from_gist():
-    """Lấy mã fetch_token và app_transaction từ link Gist RAW"""
-    if not GIST_URL:
-        return None, None
-    
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(GIST_URL, timeout=10) as res:
-                if res.status == 200:
-                    data = await res.json()
-                    return data.get("fetch_token"), data.get("app_transaction")
-        except Exception as e:
-            print(f"Lỗi đọc Gist: {e}")
-            return None, None
+class Clr:
+    HEADER = '\033[95m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
 
-async def login_admin():
-    """Đăng nhập bằng Email/Pass của bạn để lấy Session Token chính chủ"""
-    if not EMAIL or not PASSWORD:
-        return None
-        
-    url = "https://api.locket.cam/v1/auth/login"
-    payload = {"email": EMAIL, "password": PASSWORD}
-    
-    # Giả lập Header của App Locket thật
-    login_headers = {
-        "User-Agent": "Locket/1.51.0 (com.locket.Locket; build:1; iOS 17.0.0) Alamofire/5.7.1",
-        "Content-Type": "application/json"
-    }
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.post(url, json=payload, headers=login_headers, timeout=15) as res:
-                if res.status == 200:
-                    data = await res.json()
-                    return data.get("session_token")
-                return None
-        except Exception:
-            return None
-
-async def resolve_uid(input_data):
-    """Phân giải UID từ Username hoặc Link. Hỗ trợ xử lý lỗi quét HTML."""
-    if not input_data:
-        return None
-        
-    # 1. Nếu người dùng nhập thẳng UID 28 ký tự
-    clean_input = input_data.strip()
-    if len(clean_input) == 28 and re.match(r'^[A-Za-z0-9]+$', clean_input):
-        return clean_input
-
-    # 2. Xử lý lấy username từ link (locket.cam/@abc hoặc locket.cam/abc)
-    username = clean_input.split('/')[-1].replace('@', '').split('?')[0]
+async def resolve_uid(username):
     url = f"https://locket.cam/{username}"
-    
-    # Dùng User-Agent của Safari iPhone để Locket nhả HTML đầy đủ
     headers = {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+        "Accept": "text/html"
     }
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url, headers=headers, timeout=10) as res:
-                if res.status != 200:
-                    return None
-                
-                html = await res.text()
-                
-                # Tìm mã invite (UID) trong các thẻ meta hoặc script link
-                # Pattern 1: Link invite chuẩn
-                match = re.search(r'/invites/([A-Za-z0-9]{28})', html)
-                if match:
-                    return match.group(1)
-                
-                # Pattern 2: Deep link trong script
-                match_deep = re.search(r'auth_user_id=([A-Za-z0-9]{28})', html)
-                if match_deep:
-                    return match_deep.group(1)
-                    
-                return None
-        except:
-            return None
-
-async def inject_gold(target_uid, token_config=None, log_callback=None):
-    """Quy trình kích hoạt Gold chính: Login -> Lấy Token Gist -> Bơm RevenueCat"""
-    def log(msg): 
-        if log_callback: log_callback(msg)
-
-    # 1. Lấy mã Gold từ Gist (Đọc từ ENV GIST_URL)
-    fetch, trans = await get_credentials_from_gist()
     
-    # 2. Lấy Session của tài khoản Admin (Đọc từ ENV EMAIL/PASS)
-    admin_token = await login_admin()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, allow_redirects=True, timeout=10) as res:
+                html = await res.text()
+                redirect_url = str(res.url)
 
-    if not fetch or not admin_token:
-        error_msg = "Lỗi: Không lấy được mã từ Gist hoặc Login thất bại."
-        log(f"🔴 {error_msg}")
-        return False, error_msg
+                def extract(text):
+                    if not text: return None
+                    m = re.search(r'/invites/([A-Za-z0-9]{28})', text)
+                    if m: return m.group(1)
+                    
+                    lp = re.search(r'link=([^\s"\'>]+)', text)
+                    if lp:
+                        try:
+                            # Basic URL decode without urllib
+                            d = lp.group(1).replace('%3A', ':').replace('%2F', '/')
+                            dm = re.search(r'/invites/([A-Za-z0-9]{28})', d)
+                            if dm: return dm.group(1)
+                        except:
+                            pass
+                    return None
 
-    # 3. Gửi Payload tới RevenueCat
+                return extract(redirect_url) or extract(html)
+        
+    except Exception:
+        return None
+
+async def check_status(uid):
+    url = f"https://api.revenuecat.com/v1/subscribers/{uid}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=HEADERS, timeout=10) as res:
+                if 200 <= res.status < 300:
+                    data = await res.json()
+                    entitlements = data.get('subscriber', {}).get('entitlements', {}).get('Gold', {})
+                    if entitlements:
+                        expires_date = entitlements.get('expires_date')
+                        return {"active": True, "expires": expires_date}
+                    return {"active": False}
+                return {"active": False}
+    except Exception:
+        return None
+
+async def inject_gold(uid, token_config, log_callback=None):
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+
     url = "https://api.revenuecat.com/v1/receipts"
     
-    # Header quan trọng nhất: Phải có Session Token của bạn (Bearer)
-    headers = HEADERS.copy()
-    headers['Authorization'] = f'Bearer {admin_token}'
+    # Use provided token config
+    fetch_token = token_config['fetch_token']
+    app_transaction = token_config['app_transaction']
+    is_sandbox = token_config['is_sandbox']
     
     body = {
-        "product_id": "locket_199_1m",
-        "fetch_token": fetch,
-        "app_transaction": trans,
-        "app_user_id": target_uid, # UID của người cần kích hoạt
-        "is_restore": True,
-        "store_country": "VNM"
+        "product_id": "locket_199_1m", 
+        "fetch_token": fetch_token, 
+        "app_transaction": app_transaction,
+        "app_user_id": uid, 
+        "is_restore": True, 
+        "store_country": "VNM", 
+        "currency": "USD",
+        "price": "1.99", 
+        "normal_duration": "P1M", 
+        "subscription_group_id": "21419447",
+        "observer_mode": False, 
+        "initiation_source": "restore", 
+        "offers": [],
+        "attributes": { 
+            "$attConsentStatus": { "updated_at_ms": int(time.time() * 1000), "value": "notDetermined" } 
+        }
     }
+    
+    current_headers = HEADERS.copy()
+    current_headers['Content-Length'] = str(len(json.dumps(body)))
+    
+    if token_config.get('hash_params'):
+        current_headers['X-Post-Params-Hash'] = token_config['hash_params']
+    if token_config.get('hash_headers'):
+        current_headers['X-Headers-Hash'] = token_config['hash_headers']
+    
+    # Important update based on token type
+    current_headers['X-Is-Sandbox'] = str(is_sandbox).lower()
+
+    log(f"{Clr.BLUE}[*] Target Identified:{Clr.ENDC} {uid}")
+    log(f"{Clr.BLUE}[*] Loading Exploit Payload (RevenueCat)...{Clr.ENDC}")
+    log(f"{Clr.BLUE}[*] Using Token Set: {token_config.get('name', 'Custom')}{Clr.ENDC}")
 
     async with aiohttp.ClientSession() as session:
-        try:
-            log(f"[*] Đang thực hiện Exploit cho Target: {target_uid}")
-            async with session.post(url, headers=headers, json=body, timeout=20) as res:
-                if res.status == 200:
-                    log(f"✅ Kích hoạt thành công trên Server RevenueCat!")
-                    return True, "SUCCESS"
-                
-                resp_text = await res.text()
-                log(f"🔴 RevenueCat từ chối: {res.status}")
-                return False, f"Error {res.status}: {resp_text[:50]}"
-        except Exception as e:
-            log(f"🔴 Lỗi kết nối: {str(e)}")
-            return False, str(e)
+        for attempt in range(5):
+            try:
+                log(f"{Clr.WARNING}[>] Attempt {attempt+1}/5:{Clr.ENDC} Sending Receipt...")
+                async with session.post(url, headers=current_headers, json=body, timeout=15) as res:
+                    status_code = res.status
+                    
+                    if status_code == 200:
+                        log(f"{Clr.GREEN}[+] HTTP 200 OK.{Clr.ENDC} Verifying Entitlement...")
+                        status = await check_status(uid)
+                        if status and status.get('active'):
+                            log(f"{Clr.GREEN}[SUCCESS] Gold Entitlement Active!{Clr.ENDC}")
+                            return True, "SUCCESS"
+                        else:
+                            log(f"{Clr.WARNING}[!] Entitlement not found immediately. Retrying verification...{Clr.ENDC}")
+                            await asyncio.sleep(2)
+                            status = await check_status(uid)
+                            if status and status.get('active'):
+                                log(f"{Clr.GREEN}[SUCCESS] Gold Active after delay.{Clr.ENDC}")
+                                return True, "SUCCESS"
+                            log(f"{Clr.FAIL}[-] Exploitation Failed: Valid receipt but no Gold.{Clr.ENDC}")
+                            return False, "Accepted but NO Gold (Expired?)"
+                            
+                    elif status_code == 529:
+                        log(f"{Clr.WARNING}[!] Server Busy (529). Cooldown 2s...{Clr.ENDC}")
+                        await asyncio.sleep(2)
+                        continue
+                        
+                    else:
+                        msg = "Unknown Error"
+                        try:
+                            resp_json = await res.json()
+                            msg = resp_json.get('message', str(status_code))
+                        except:
+                            msg = str(status_code)
+                        log(f"{Clr.FAIL}[x] Request Rejected: {msg}{Clr.ENDC}")
+                        return False, f"Rejected: {msg}"
+                    
+            except Exception as e:
+                log(f"{Clr.FAIL}[!] Network Error: {e}{Clr.ENDC}")
+                if attempt == 4:
+                    return False, f"Request Error: {str(e)}"
+                await asyncio.sleep(2)
+            
+    return False, "Timeout / Failed after retries"

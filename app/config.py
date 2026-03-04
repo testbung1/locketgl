@@ -1,37 +1,29 @@
 import os
 
-# --- Cấu hình đọc từ Environment Variables (Render) ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 NEXTDNS_KEY = os.environ.get("NEXTDNS_KEY", "")
-EMAIL_ACC = os.environ.get("EMAIL_ACC", "")
-PASSWORD_ACC = os.environ.get("PASSWORD_ACC", "")
-GIST_URL = os.environ.get("GIST_URL", "")
 
-# --- Cấu hình hệ thống ---
-ADMIN_ID = 7395540739
-NUM_WORKERS = 1
-DONATE_PHOTO = "AgACAgUAAxkBAAEhBOdpjtu4_D_90mzmM3ax-jLUQbW7HwACjA5rGyK6eFQz2Vzy6zHTMwEAAwIAA3kAAzoE"
-DEFAULT_LANG = "VI"
-
-# --- Cấu hình Token Gold (Thông tin chi tiết sẽ được bốc từ GIST_URL trong services/locket.py) ---
 TOKEN_SETS = [
     {
-        "name": "Locket_Gold_Env_System",
-        "fetch_token": "", # Bot sẽ tự lấy từ Gist
+        "fetch_token": "",
         "app_transaction": "",
+        "hash_params": "",
+        "hash_headers": "",
+        "is_sandbox": True,
+    },
+    {
+        "fetch_token": "",
+        "app_transaction": "",
+        "hash_params": "",
+        "hash_headers": "",
         "is_sandbox": False,
-    }
+    },
 ]
 
-# --- Headers mặc định cho API ---
-HEADERS = {
-    "User-Agent": "Locket/1.51.0 (com.locket.Locket; build:1; iOS 17.0.0) Alamofire/5.7.1",
-    "Content-Type": "application/json",
-    "Accept": "*/*",
-    "X-Platform": "iOS"
-}
+ADMIN_ID = 6581326766
+NUM_WORKERS = 2
+DONATE_PHOTO = "AgACAgUAAxkBAAEhBOdpjtu4_D_90mzmM3ax-jLUQbW7HwACjA5rGyK6eFQz2Vzy6zHTMwEAAwIAA3kAAzoE"
 
-# --- Định nghĩa Emoji ---
 E_LOADING = '<tg-emoji emoji-id="5350752364246606166">✍️</tg-emoji>'
 E_LIMIT   = '<tg-emoji emoji-id="5424857974784925603">🚫</tg-emoji>'
 E_SUCCESS = '<tg-emoji emoji-id="5260463209562776385">✅</tg-emoji>'
@@ -50,7 +42,9 @@ E_CALENDAR = '<tg-emoji emoji-id="5413879192267805083">📅</tg-emoji>'
 E_IOS     = '<tg-emoji emoji-id="5350556204500263431">🍏</tg-emoji>'
 E_ANDROID = '<tg-emoji emoji-id="5303145396254563405">🤖</tg-emoji>'
 
-# --- Hệ thống ngôn ngữ ---
+
+DEFAULT_LANG = "VI"
+
 TEXTS = {
     "VI": {
         "welcome": f"{E_SUCCESS} <b>Locket Gold Activator</b>\n\nChào mừng! Vui lòng chọn ngôn ngữ hoặc sử dụng menu bên dưới.",
@@ -73,7 +67,7 @@ TEXTS = {
         ),
         "resolving": f"{E_LOADING} <b>Đang phân giải UID...</b>",
         "not_found": f"{E_ERROR} Không tìm thấy User.",
-        "limit_reached": f"{E_LIMIT} Đã đạt giới hạn request.",
+        "limit_reached": f"{E_LIMIT} Đã đạt giới hạn request (5/5).",
         "queue_almost": f"{E_LOADING} <b>Sắp đến lượt bạn!</b>\nCòn <b>2 người</b> nữa là đến lượt bạn. Hãy chuẩn bị sẵn sàng! 🚀",
         "admin_noti_sent": f"{E_SUCCESS} Đã gửi thông báo đến tất cả user.",
         "admin_reset": f"{E_SUCCESS} Đã reset lượt dùng cho user {{}}.",
@@ -129,7 +123,7 @@ TEXTS = {
         ),
         "resolving": f"{E_LOADING} <b>Resolving UID...</b>",
         "not_found": f"{E_ERROR} User not found.",
-        "limit_reached": f"{E_LIMIT} Daily limit reached.",
+        "limit_reached": f"{E_LIMIT} Daily limit reached (5/5).",
         "queue_almost": f"{E_LOADING} <b>Almost your turn!</b>\n<b>2 people</b> ahead of you. Get ready! 🚀",
         "admin_noti_sent": f"{E_SUCCESS} Notification sent to all users.",
         "admin_reset": f"{E_SUCCESS} Usage reset for user {{}}.",
